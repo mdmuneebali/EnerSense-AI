@@ -35,46 +35,34 @@ VERY_HIGH_THRESHOLD = 330
 
 FEATURE_COLUMNS = [
     "lights",
-
     "T1",
     "RH_1",
-
     "T2",
     "RH_2",
-
     "T3",
     "RH_3",
-
     "T4",
     "RH_4",
-
     "T5",
     "RH_5",
-
     "T6",
     "RH_6",
-
     "T7",
     "RH_7",
-
     "T8",
     "RH_8",
-
     "T9",
     "RH_9",
-
     "T_out",
     "Press_mm_hg",
     "RH_out",
     "Windspeed",
     "Visibility",
     "Tdewpoint",
-
     "hour",
     "day_of_week",
     "is_weekend",
     "month",
-
     "Appliances_lag_1",
     "Appliances_lag_2",
     "Appliances_lag_3",
@@ -88,43 +76,31 @@ FEATURE_COLUMNS = [
 REQUIRED_COLUMNS = [
     "date",
     "Appliances",
-
     "lights",
-
     "T1",
     "RH_1",
-
     "T2",
     "RH_2",
-
     "T3",
     "RH_3",
-
     "T4",
     "RH_4",
-
     "T5",
     "RH_5",
-
     "T6",
     "RH_6",
-
     "T7",
     "RH_7",
-
     "T8",
     "RH_8",
-
     "T9",
     "RH_9",
-
     "T_out",
     "Press_mm_hg",
     "RH_out",
     "Windspeed",
     "Visibility",
     "Tdewpoint",
-
     "rv1",
     "rv2",
 ]
@@ -139,29 +115,17 @@ def energy_decision(predicted_energy, is_anomaly):
     if predicted_energy >= VERY_HIGH_THRESHOLD:
 
         alert = "VERY HIGH"
-
-        recommendation = (
-            "Check major electrical loads"
-        )
+        recommendation = "Check major electrical loads"
 
     elif predicted_energy >= HIGH_THRESHOLD:
 
         alert = "HIGH"
-
-        recommendation = (
-            "Monitor building energy usage"
-        )
+        recommendation = "Monitor building energy usage"
 
     else:
 
         alert = "NORMAL"
-
-        recommendation = (
-            "Normal operation"
-        )
-
-    # Override recommendation when
-    # an unexpected high-consumption event occurs.
+        recommendation = "Normal operation"
 
     if is_anomaly:
 
@@ -176,9 +140,7 @@ def energy_decision(predicted_energy, is_anomaly):
 # LOAD UCI DATASET
 # ============================================================
 
-@st.cache_data(
-    show_spinner="Loading energy dataset..."
-)
+@st.cache_data(show_spinner="Loading energy dataset...")
 def load_dataset():
 
     try:
@@ -188,17 +150,10 @@ def load_dataset():
         # UCI Appliances Energy Prediction
         # Dataset ID = 374
 
-        dataset = fetch_ucirepo(
-            id=374
-        )
+        dataset = fetch_ucirepo(id=374)
 
-        features = (
-            dataset.data.features.copy()
-        )
-
-        targets = (
-            dataset.data.targets.copy()
-        )
+        features = dataset.data.features.copy()
+        targets = dataset.data.targets.copy()
 
         # Make sure target column is called Appliances
 
@@ -206,8 +161,7 @@ def load_dataset():
 
             targets = targets.rename(
                 columns={
-                    targets.columns[0]:
-                    "Appliances"
+                    targets.columns[0]: "Appliances"
                 }
             )
 
@@ -228,9 +182,8 @@ def load_dataset():
         raise RuntimeError(
             "The UCI dataset could not be loaded "
             "automatically. Please check the "
-            "internet connection or download the "
-            "UCI Appliances Energy Prediction "
-            "dataset manually."
+            "internet connection or the UCI "
+            "dataset availability."
         ) from exc
 
 
@@ -238,9 +191,7 @@ def load_dataset():
 # BUILD MODEL RESULTS
 # ============================================================
 
-@st.cache_data(
-    show_spinner="Running EnerSense AI model..."
-)
+@st.cache_data(show_spinner="Running EnerSense AI model...")
 def build_results(df):
 
     data = df.copy()
@@ -263,11 +214,33 @@ def build_results(df):
         )
 
     # --------------------------------------------------------
-    # Convert date column
+    # FIX AND CONVERT DATE COLUMN
+    # --------------------------------------------------------
+    #
+    # Some UCI responses can contain datetime values such as:
+    #
+    # 2016-01-1117:00:00
+    #
+    # instead of:
+    #
+    # 2016-01-11 17:00:00
+    #
+    # Insert the missing space between date and time.
     # --------------------------------------------------------
 
-    data["date"] = pd.to_datetime(
+    data["date"] = (
         data["date"]
+        .astype(str)
+        .str.replace(
+            r"^(\d{4}-\d{2}-\d{2})(\d{2}:)",
+            r"\1 \2",
+            regex=True
+        )
+    )
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="raise"
     )
 
     # --------------------------------------------------------
@@ -284,9 +257,7 @@ def build_results(df):
     # Time-based feature engineering
     # --------------------------------------------------------
 
-    data["hour"] = (
-        data["date"].dt.hour
-    )
+    data["hour"] = data["date"].dt.hour
 
     data["day_of_week"] = (
         data["date"].dt.dayofweek
@@ -332,13 +303,8 @@ def build_results(df):
     # Prepare X and y
     # --------------------------------------------------------
 
-    X = model_data[
-        FEATURE_COLUMNS
-    ]
-
-    y = model_data[
-        "Appliances"
-    ]
+    X = model_data[FEATURE_COLUMNS]
+    y = model_data["Appliances"]
 
     # --------------------------------------------------------
     # Chronological 80/20 train-test split
@@ -348,21 +314,11 @@ def build_results(df):
         len(model_data) * 0.80
     )
 
-    X_train = X.iloc[
-        :split_index
-    ]
+    X_train = X.iloc[:split_index]
+    X_test = X.iloc[split_index:]
 
-    X_test = X.iloc[
-        split_index:
-    ]
-
-    y_train = y.iloc[
-        :split_index
-    ]
-
-    y_test = y.iloc[
-        split_index:
-    ]
+    y_train = y.iloc[:split_index]
+    y_test = y.iloc[split_index:]
 
     # --------------------------------------------------------
     # Train Linear Regression model
@@ -426,8 +382,8 @@ def build_results(df):
         95
     )
 
-    # Positive residual means actual energy
-    # was higher than predicted energy.
+    # Positive residual means actual consumption
+    # was higher than predicted consumption.
 
     anomaly_flags = (
         residuals >= anomaly_threshold
@@ -470,7 +426,6 @@ def build_results(df):
             prediction,
             anomaly
         )
-
         for prediction, anomaly
         in zip(
             predictions,
@@ -493,21 +448,12 @@ def build_results(df):
     # --------------------------------------------------------
 
     metrics = {
-
         "mae": mae,
-
         "rmse": rmse,
-
         "r2": r2,
-
-        "anomaly_threshold":
-            anomaly_threshold,
-
-        "train_rows":
-            len(X_train),
-
-        "test_rows":
-            len(X_test),
+        "anomaly_threshold": anomaly_threshold,
+        "train_rows": len(X_train),
+        "test_rows": len(X_test),
     }
 
     return results, metrics
@@ -517,9 +463,7 @@ def build_results(df):
 # APPLICATION HEADER
 # ============================================================
 
-st.title(
-    "⚡ EnerSense AI"
-)
+st.title("⚡ EnerSense AI")
 
 st.subheader(
     "Intelligent Building Energy Optimizer"
@@ -538,9 +482,7 @@ st.write(
 
 with st.sidebar:
 
-    st.header(
-        "Dashboard Filters"
-    )
+    st.header("Dashboard Filters")
 
     st.caption(
         "Model: Linear Regression with "
@@ -562,17 +504,13 @@ try:
 
     raw_data = load_dataset()
 
-    results, metrics = (
-        build_results(
-            raw_data
-        )
+    results, metrics = build_results(
+        raw_data
     )
 
 except Exception as exc:
 
-    st.error(
-        str(exc)
-    )
+    st.error(str(exc))
 
     st.stop()
 
@@ -585,13 +523,11 @@ with st.sidebar:
 
     selected_alerts = st.multiselect(
         "Alert levels",
-
         [
             "NORMAL",
             "HIGH",
             "VERY HIGH"
         ],
-
         default=[
             "NORMAL",
             "HIGH",
@@ -599,10 +535,8 @@ with st.sidebar:
         ],
     )
 
-    show_anomalies_only = (
-        st.checkbox(
-            "Show unexpected high-consumption events only"
-        )
+    show_anomalies_only = st.checkbox(
+        "Show unexpected high-consumption events only"
     )
 
 
@@ -742,9 +676,7 @@ chart = (
     ]
 )
 
-st.line_chart(
-    chart
-)
+st.line_chart(chart)
 
 
 # ============================================================
@@ -773,9 +705,7 @@ with left:
         )
     )
 
-    st.bar_chart(
-        alert_counts
-    )
+    st.bar_chart(alert_counts)
 
 
 # ============================================================
@@ -834,9 +764,7 @@ recommendation_counts = (
 
 st.dataframe(
     recommendation_counts,
-
     use_container_width=True,
-
     hide_index=True
 )
 
@@ -871,9 +799,7 @@ recent_events = (
 
 st.dataframe(
     recent_events,
-
     use_container_width=True,
-
     hide_index=True
 )
 
@@ -882,9 +808,7 @@ st.dataframe(
 # MODEL DETAILS
 # ============================================================
 
-with st.expander(
-    "Model details"
-):
+with st.expander("Model details"):
 
     st.write(
         f"Chronological split: "
@@ -923,11 +847,11 @@ with st.expander(
     )
 
     st.write(
-        "An unexpected high-consumption "
-        "event is flagged when the actual "
-        "energy consumption is at least "
-        "the anomaly threshold above the "
-        "predicted consumption."
+        "An unexpected high-consumption event "
+        "is flagged when the actual energy "
+        "consumption is at least the anomaly "
+        "threshold above the predicted "
+        "consumption."
     )
 
 
